@@ -34,16 +34,65 @@ class Timer:
 # 🎯 Конфигурация
 # ─────────────────────────────────────────────────────────────
 SUPPORTED_FORMS = {"D": "Form D", "C": "Form C", "A": "Form 1-A"}
-TARGET_INDUSTRIES_D = ["Software", "Technology", "Other Technology", "Communications", 
-                       "Health Care", "Banking & Financial Services", "Financial Services", 
-                       "Internet", "Computer Hardware", "Electronics", "Biotechnology","Other","Other Energy","Hospitals and Physicians"]
+TARGET_INDUSTRIES_D = [
+    # 💻 ЯДРО IT (Чистый Tech)
+    "Technology",
+    "Computers",
+    "Internet",
+    "Telecommunications",
+    "Other Technology",  # Частый выбор для IoT/DeepTech стартапов
+    
+    # 💰 ВЫСОКИЙ БЮДЖЕТ (Финтех и Банкинг)
+    "Banking & Financial Services",
+    "Insurance",  # Иншуртех
+    "Investing",  # Инвест-платформы (не фонды!)
+    
+    # 🏥 MEDTECH (Высокая потребность в ПО)
+    "Health Care",
+    "Biotechnology",
+    "Other Health Care",
+    "Hospitals & Physicians", # Внедряют EHR/Телемедицину
+    
+    # 🛍 РИТЕЙЛ И E-COMMERCE
+    "Retailing",
+    "Business Services", # Часто SaaS-компании выбирают это
+    
+    # 🌱 КЛИНТЕХ И ЭНЕРДЖИ (Smart Grid, ПО для энергетики)
+    "Energy Conservation",
+    "Other Energy",
+    
+    # 🏗 PROPTECH (Недвижимость + IT)
+    "Other Real Estate", 
+    
+    # 📦 НЕОПРЕДЕЛЕННЫЕ (Много стартапов выбирают "Other")
+    "Other",
+]
 
 INDUSTRY_KEYWORDS = {
-    "fintech": ["fintech","payments","payment platform","digital banking","neobank","embedded finance","lending platform","BNPL","card issuing"],
-    "healthtech": ["healthtech","digital health","telehealth","EHR","clinical decision support","mental health platform"],
-    "blockchain": ["blockchain","crypto","DeFi","smart contract","tokenization","stablecoin"],
-    "ai": ["artificial intelligence","machine learning","generative AI","LLM","computer vision","NLP"],
-    "saas": ["SaaS","enterprise software","workflow automation","API platform","developer tools"]
+    # 🔹 IT / SOFT / WEB
+    "software": [
+        "software", "SaaS", "platform", "mobile app", "web application", "cloud computing",
+        "API", "artificial intelligence", "machine learning", "AI", "blockchain", "crypto",
+        "marketplace", "e-commerce", "ecommerce", "digital platform", "data analytics",
+    ],
+    
+    # 🔹 FINTECH (Банкинг/Платежи)
+    "fintech": [
+        "fintech", "payment processing", "digital banking", "neobank", "lending platform",
+        "financial technology", "insurtech", "wealth management", "crypto exchange",
+    ],
+    
+    # 🔹 HEALTHTECH (Медицина)
+    "healthtech": [
+        "digital health", "telehealth", "telemedicine", "EHR", "EMR", "healthcare platform",
+        "biotech", "biotechnology", "medical device", "patient engagement",
+    ],
+    
+    # 🔹 RETAIL / PROPTECH
+    "retail_proptech": [
+        "proptech", "real estate technology", "smart home", "logistics platform",
+        "supply chain", "inventory management", "DTC", "direct to consumer",
+    ],
 }
 
 HEADERS = {"User-Agent":"Yame yddfr@email.com","Accept":"application/json, text/xml, */*","Accept-Encoding":"gzip, deflate"}
@@ -175,6 +224,9 @@ def extract_hit(hit):
         "period": s.get("period_of_report",""), 
         "file_num": file_num_clean,  # ← Теперь строка, а не список
         "industry_group": "",  # ← Всегда будет в CSV
+        "offering_amount": None,
+        "sold_amount": None,
+        "keywords_found": [],
     }
 
 # ─────────────────────────────────────────────────────────────
@@ -253,16 +305,23 @@ def fetch_all(forms, start, end, kw_q=None, min_d=500_000, min_ca=100_000, max_a
                         log(f"   ⚠️ XML не найден для {b['company_name'][:30]}, пропускаем фильтры", "warning")
                 
                 if not keep_all:
-                    if ft == "D" and ind_d:
-                        ind = (b.get("industry_group") or "").strip()
-                        if ind and ind not in ind_d:
-                            reason = f"industry '{ind}' not in target"
+                    if ft == "D":
+                        if ind_d:
+                            ind = (b.get("industry_group") or "").strip()
+                            if ind and ind not in ind_d:
+                                reason = f"industry '{ind}' not in target"
+                        amt = b.get("sold_amount") or b.get("offering_amount")
+                        if amt is None:
+                            reason = "amount missing"
+                        elif amt < min_d or amt > max_amt:
+                            reason = f"amount ${amt:,.0f} out of range"
                     elif ft in ("C","A"):
                         if kw_list and not b.get("keywords_found"):
                             reason = "keywords not found in text"
                         amt = b.get("sold_amount") or b.get("offering_amount")
-                        min_thr = min_d if ft=="D" else min_ca
-                        if amt and (amt < min_thr or amt > max_amt):
+                        if amt is None:
+                            reason = "amount missing"
+                        elif amt < min_ca or amt > max_amt:
                             reason = f"amount ${amt:,.0f} out of range"
                 
                 if reason:

@@ -37,12 +37,11 @@ Your task:
 
 Required output:
 Return ONLY valid JSON with the following fields:
-{
+{{
   "linkedin": "LinkedIn company URL or null",
   "email": "public contact email or null",
-  "website": "official website URL or null",
-  "notes": "short note about search sources or fallback behavior"
-}
+  "website": "official website URL or null"
+}}
 
 If a value cannot be reliably found, return null for that field. Do not add extra text outside the JSON object.
 """
@@ -101,22 +100,18 @@ def enrich_row(client: OpenAI, company_name: str, cik: Optional[str] = None, ver
         return {
             "linkedin": None,
             "email": None,
-            "website": None,
-            "notes": f"API failed: {exc}"
+            "website": None
         }
-    print(completion.choices[0].message)
+    
     data = extract_json(content)
     if not data:
         fallback = extract_fallbacks(content)
         data = {
             "linkedin": fallback.get("linkedin"),
             "email": fallback.get("email"),
-            "website": fallback.get("website"),
-            "notes": "Parsed from raw response with fallback extraction"
+            "website": fallback.get("website")
         }
     else:
-        if "notes" not in data:
-            data["notes"] = "Extracted by model"
         for field in ("linkedin", "email", "website"):
             if field in data and data[field] is not None:
                 data[field] = str(data[field]).strip() or None
@@ -152,21 +147,17 @@ def main():
         df["website"] = None
     if "email" not in df.columns:
         df["email"] = None
-    if "enrich_notes" not in df.columns:
-        df["enrich_notes"] = None
 
     for index, row in df.iterrows():
         company_name = str(row.get("company_name") or row.get("Company") or "").strip()
         cik = str(row.get("cik") or row.get("CIK") or "").strip() or None
         if not company_name:
-            df.at[index, "enrich_notes"] = "No company name"
             continue
 
         enriched = enrich_row(client, company_name, cik, verbose=args.verbose)
         df.at[index, "linkedin"] = enriched.get("linkedin")
         df.at[index, "email"] = enriched.get("email")
         df.at[index, "website"] = enriched.get("website")
-        df.at[index, "enrich_notes"] = enriched.get("notes")
 
         if args.verbose:
             print(f"  -> linkedin={enriched.get('linkedin')} email={enriched.get('email')} website={enriched.get('website')}")

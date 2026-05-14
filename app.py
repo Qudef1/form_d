@@ -6,6 +6,7 @@ from form_d_companies import (
     fetch_all, TARGET_INDUSTRIES_D, INDUSTRY_KEYWORDS,
     SUPPORTED_FORMS, build_query
 )
+from form_d_enricher import load_api_client, enrich_row
 
 st.set_page_config(page_title="SEC EDGAR Parser", layout="wide")
 
@@ -76,6 +77,7 @@ if st.button("🚀 Запустить парсинг", type="primary"):
         
         if results:
             df = pd.DataFrame(results)
+            st.session_state.df = df  # Сохраняем в session_state
             
             st.success(f"Найдено {len(results)} компаний")
             
@@ -93,5 +95,36 @@ if st.button("🚀 Запустить парсинг", type="primary"):
                 file_name=f"sec_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
+            
+            if st.button("🔍 Find Contacts", type="secondary"):
+                st.session_state.enrich = True
+            
+            if st.session_state.get("enrich", False):
+                st.subheader("Enriching Contacts...")
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                try:
+                    client = load_api_client()
+                    total = len(df)
+                    for i, (index, row) in enumerate(df.iterrows()):
+                        company_name = str(row.get("company_name") or "").strip()
+                        cik = str(row.get("cik") or "").strip() or None
+                        if company_name:
+                            status_text.text(f"Processing {i+1}/{total}: {company_name[:50]}...")
+                            enriched = enrich_row(client, company_name, cik, verbose=False)
+                            df.at[index, "linkedin"] = enriched.get("linkedin")
+                            df.at[index, "email"] = enriched.get("email")
+                            df.at[index, "website"] = enriched.get("website")
+                        progress_bar.progress((i + 1) / total)
+                    
+                    st.session_state.df = df
+                    st.success("Enrichment completed!")
+                    st.session_state.enrich = False
+                    st.rerun()  # Перезагрузить страницу, чтобы обновить dataframe
+                    
+                except Exception as e:
+                    st.error(f"Enrichment failed: {e}")
+                    st.session_state.enrich = False
         else:
             st.warning("Ничего не найдено")
