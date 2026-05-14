@@ -415,6 +415,6 @@ def main():
     if not res: log("❌ Ничего не найдено", "error"); return
     save_csv(res, f"{args.output}.csv")
     log(f"✅ ГОТОВО | {len(res)} компаний в {args.output}.csv")
-    log("🔗 Следующий шаг: python serper_enricher.py " + args.output + ".csv")
+    log("🔗 Следующий шаг: python form_d_enricher.py " + args.output + ".csv")
 
 if __name__=="__main__": main()

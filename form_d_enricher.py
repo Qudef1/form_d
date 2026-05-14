@@ -80,6 +80,16 @@ def extract_fallbacks(text: str) -> dict:
     return result
 
 
+def normalize_company_name(name: str) -> str:
+    if not isinstance(name, str):
+        return ""
+    name = name.strip()
+    name = re.sub(r"\(CIK\s*\d+\)", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"[^A-Za-z0-9\s]+", " ", name)
+    name = re.sub(r"\s+", " ", name).strip().lower()
+    return name
+
+
 def enrich_row(client: OpenAI, company_name: str, cik: Optional[str] = None, verbose: bool = False) -> dict:
     prompt = build_prompt(company_name, cik)
     if verbose:
@@ -148,6 +158,9 @@ def main():
     if "email" not in df.columns:
         df["email"] = None
 
+    df["_normalized_name"] = df["company_name"].fillna("").astype(str).apply(normalize_company_name)
+    df = df.drop_duplicates(subset=["_normalized_name"]).reset_index(drop=True)
+
     for index, row in df.iterrows():
         company_name = str(row.get("company_name") or row.get("Company") or "").strip()
         cik = str(row.get("cik") or row.get("CIK") or "").strip() or None
@@ -162,8 +175,18 @@ def main():
         if args.verbose:
             print(f"  -> linkedin={enriched.get('linkedin')} email={enriched.get('email')} website={enriched.get('website')}")
 
-    df.to_csv(output_path, index=False)
-    print(f"Saved enriched results to {output_path}")
+    found_mask = df[["linkedin", "email", "website"]].notna().any(axis=1)
+    found_df = df[found_mask].drop(columns=["_normalized_name"]).reset_index(drop=True)
+    not_found_df = df[~found_mask].drop(columns=["_normalized_name"]).reset_index(drop=True)
+
+    output_base = Path(output_path or f"enriched_{Path(input_path).stem}")
+    found_path = output_base.parent / f"{output_base.stem}_contacts_found.csv"
+    not_found_path = output_base.parent / f"{output_base.stem}_contacts_missing.csv"
+
+    found_df.to_csv(found_path, index=False)
+    not_found_df.to_csv(not_found_path, index=False)
+    print(f"Saved enriched results: {found_path}")
+    print(f"Saved missing contacts: {not_found_path}")
 
 
 if __name__ == "__main__":
